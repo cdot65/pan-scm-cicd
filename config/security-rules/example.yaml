@@ -8,7 +8,7 @@
   description: "Allow internal users to access web applications"
   from_: ["DMZ"]
   to_: ["DIA"]
-  source: ["internal-subnet"]
+  source: ["10.1.0.0/16", "10.2.0.0/16"]
   destination: ["any"]
   application: ["web-browsing", "ssl", "dns"]
   service: ["application-default"]
@@ -24,7 +24,7 @@
   description: "Block traffic to known malicious destinations"
   from_: ["DMZ"]
   to_: ["DIA"]
-  source: ["internal_network4", "internal_network5"]
+  source: ["10.1.0.0/16", "10.2.0.0/16"]
   destination: ["panw-highrisk-ip-list"]
   application: ["any"]
   service: ["any"]
