@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
-
 from scm_cicd.security_rules import SecurityRuleConfig
 
 

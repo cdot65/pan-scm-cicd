@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from scm_cicd.cli import app
 
 

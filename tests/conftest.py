@@ -12,13 +12,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from scm_cicd.security_rules import SCMSecurityRuleManager, SecurityRuleConfig
 from typer.testing import CliRunner
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-
-from scm_cicd.security_rules import SCMSecurityRuleManager, SecurityRuleConfig
 
 # Integration test fixtures - these connect to real SCM API
 # Skip these tests if running in CI environment or if explicitly skipped

@@ -9,7 +9,6 @@ import tempfile
 
 import pytest
 import yaml
-
 from scm_cicd.security_rules import SecurityRuleConfig
 
 
