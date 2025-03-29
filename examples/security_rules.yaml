@@ -1,0 +1,47 @@
+# Example security rules configuration for SCM CICD pipeline
+# This file can be used with the cli.py script to apply security rules
+
+# Allow internal to internet web traffic
+- name: "allow-internal-web"
+  folder: "Global"
+  description: "Allow internal users to access web applications"
+  from_: ["trust"]
+  to_: ["untrust"]
+  source: ["internal-subnet"]
+  destination: ["any"]
+  application: ["web-browsing", "ssl", "dns"]
+  service: ["application-default"]
+  action: "allow"
+  log_end: true
+  tag: ["policy-type:allow", "service:web"]
+
+# Block known malicious sites
+- name: "block-malicious"
+  folder: "Global"
+  description: "Block traffic to known malicious destinations"
+  from_: ["trust"]
+  to_: ["untrust"]
+  source: ["any"]
+  destination: ["malicious-destinations"]
+  application: ["any"]
+  service: ["any"]
+  action: "deny"
+  log_start: true
+  log_end: true
+  tag: ["policy-type:block", "threat:malicious-sites"]
+  
+# Allow internal application traffic
+- name: "allow-internal-apps"
+  folder: "Global"
+  description: "Allow internal applications traffic"
+  from_: ["trust"]
+  to_: ["trust"]
+  source: ["internal-subnet"]
+  destination: ["app-servers"]
+  application: ["web-browsing", "ssl", "ms-sql-db"]
+  service: ["application-default"]
+  profile_setting:
+    group: ["default"]
+  action: "allow"
+  log_end: true
+  tag: ["policy-type:allow", "service:internal"]

@@ -1,0 +1,36 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+    -   id: detect-private-key  # Detects private keys
+
+-   repo: https://github.com/zricethezav/gitleaks
+    rev: v8.18.2
+    hooks:
+    -   id: gitleaks  # Comprehensive secret detection
+
+-   repo: https://github.com/bridgecrewio/checkov.git
+    rev: 3.2.34
+    hooks:
+    -   id: checkov
+        args: [--quiet, --skip-framework, dockerfile,kubernetes]
+
+-   repo: local
+    hooks:
+    -   id: ruff-check
+        name: ruff check
+        entry: poetry run ruff check
+        language: system
+        types: [python]
+        pass_filenames: true
+
+    -   id: ruff-format
+        name: ruff format
+        entry: poetry run ruff format
+        language: system
+        types: [python]
+        pass_filenames: true

@@ -1,0 +1,52 @@
+My project is to leverage the pan-scm-sdk to build a CICD pipeline for Palo Alto Networks Strata Cloud Manager.
+
+## Project Structure
+
+The project is structured as follows:
+
+```
+.
+├── .WINDSURF
+├── .windsurfrules
+├── .github
+├── .gitignore
+├── tests
+└── .windsurfrules.md
+```
+
+## Development
+
+The development environment is set up using a virtual environment.
+
+- Python 3.12.9 as the base interpreter
+- Python Poetry  for managing our dependencies
+- poetry.toml file for setting the virtual environmnet in the project directory
+
+## Code Style
+
+- Use ruff for code quality checks and formatting
+- Use flake8 for additional code quality checks, max length 128 characters per line
+
+## Testing
+
+- Use pytest for running tests
+- Use factory boy for object creation
+- Use dynaconf for configuration management
+
+## Documentation
+
+- Use markdown for documentation
+- Use docstrings for code documentation
+- Use comments for inline code documentation
+- reference .WINDSURF directory for additional documentation on how to use the sdk
+- .WINDSURF/client.md for client module documentation
+- .WINDSURF/exceptions.md for exceptions module documentation
+- .WINDSURF/config/security_services/security_rule.md for SDK service file documentation
+- .WINDSURF/models/security_services/security_rule_models.md for Pydantic models  documentation
+- .WINDSURF/auth.md for auth module documentation
+- .WINDSURF/index.md for index documentation
+
+## CICD
+
+- Use GitHub Actions for CI/CD pipeline
+- Use checkov for security checks
