@@ -4,10 +4,10 @@
 
 # Allow internal to internet web traffic
 - name: "allow-internal-web"
-  folder: "Global"
+  folder: "Texas"
   description: "Allow internal users to access web applications"
-  from_: ["trust"]
-  to_: ["untrust"]
+  from_: ["DMZ"]
+  to_: ["DIA"]
   source: ["internal-subnet"]
   destination: ["any"]
   application: ["web-browsing", "ssl", "dns"]
@@ -16,16 +16,16 @@
   source_user: ["any"]
   action: "allow"
   log_end: true
-  tag: ["policy-type:allow", "service:web"]
+  tag: ["Automation", "CICD"]
 
 # Block known malicious sites
 - name: "block-malicious"
-  folder: "Global"
+  folder: "Texas"
   description: "Block traffic to known malicious destinations"
-  from_: ["trust"]
-  to_: ["untrust"]
-  source: ["any"]
-  destination: ["malicious-destinations"]
+  from_: ["DMZ"]
+  to_: ["DIA"]
+  source: ["internal_network4", "internal_network5"]
+  destination: ["panw-highrisk-ip-list"]
   application: ["any"]
   service: ["any"]
   category: ["any"]
@@ -33,4 +33,4 @@
   action: "deny"
   log_start: true
   log_end: true
-  tag: ["policy-type:block", "threat:malicious-sites"]
+  tag: ["Automation", "CICD"]
