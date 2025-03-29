@@ -12,6 +12,8 @@
   destination: ["any"]
   application: ["web-browsing", "ssl", "dns"]
   service: ["application-default"]
+  category: ["any"]
+  source_user: ["any"]
   action: "allow"
   log_end: true
   tag: ["policy-type:allow", "service:web"]
@@ -26,6 +28,8 @@
   destination: ["malicious-destinations"]
   application: ["any"]
   service: ["any"]
+  category: ["any"]
+  source_user: ["any"]
   action: "deny"
   log_start: true
   log_end: true
