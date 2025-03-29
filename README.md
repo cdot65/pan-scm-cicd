@@ -100,13 +100,13 @@ Apply security rules from a configuration file:
 
 ```bash
 # Check syntax without applying changes
-poetry run python -m src.scm_cicd.cli apply config/security-rules/example.yaml --dry-run
+poetry run python -m scm_cicd.cli apply config/security-rules/example.yaml --dry-run
 
 # Apply rules without committing changes
-poetry run python -m src.scm_cicd.cli apply config/security-rules/example.yaml
+poetry run python -m scm_cicd.cli apply config/security-rules/example.yaml
 
 # Apply rules and commit changes
-poetry run python -m src.scm_cicd.cli apply config/security-rules/example.yaml --commit
+poetry run python -m scm_cicd.cli apply config/security-rules/example.yaml --commit
 ```
 
 #### List Security Rules
@@ -114,7 +114,7 @@ poetry run python -m src.scm_cicd.cli apply config/security-rules/example.yaml -
 List security rules in a container:
 
 ```bash
-poetry run python -m src.scm_cicd.cli list "Global"
+poetry run python -m scm_cicd.cli list "Global"
 ```
 
 #### Delete a Security Rule
@@ -122,7 +122,7 @@ poetry run python -m src.scm_cicd.cli list "Global"
 Delete a security rule:
 
 ```bash
-poetry run python -m src.scm_cicd.cli delete "rule-name" "Global" --commit
+poetry run python -m scm_cicd.cli delete "rule-name" "Global" --commit
 ```
 
 #### Commit Changes
@@ -130,22 +130,75 @@ poetry run python -m src.scm_cicd.cli delete "rule-name" "Global" --commit
 Commit changes to SCM:
 
 ```bash
-poetry run python -m src.scm_cicd.cli commit "Global" --message "Updated security rules"
+poetry run python -m scm_cicd.cli commit "Global" --message "Updated security rules"
 ```
 
 ## GitHub Actions CICD Integration
 
-This project includes a GitHub Actions workflow (`security-rules.yml`) that automatically validates and deploys security rules when:
+This project includes GitHub Actions workflows for automating security rule deployment:
 
-- Code is pushed to the main branch
-- Changes are made to files in the `config/security-rules/` directory
-- The workflow is manually triggered
+1. **Validation**: All rule files are checked with Checkov and validated with dry-run mode before applying.
+2. **Security Scanning**: Automatically scans for secrets and security issues.
+3. **Deployment**: When pushed to main or triggered manually, rules are applied with automatic commits.
 
-To use this workflow, configure the following GitHub Secrets:
+## Development
 
-- `PAN_CLIENT_ID`: Your SCM client ID
-- `PAN_CLIENT_SECRET`: Your SCM client secret
-- `PAN_TSG_ID`: Your SCM tenant service group ID
+### Prerequisites
+
+- Python 3.12+
+- [Poetry](https://python-poetry.org/)
+- [Gitleaks](https://github.com/zricethezav/gitleaks) (optional, for additional secrets scanning)
+
+### Getting Started
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/pan-scm-cicd.git
+cd pan-scm-cicd
+```
+
+2. Install dependencies:
+
+```bash
+poetry install
+```
+
+3. Set up pre-commit hooks:
+
+```bash
+poetry run pre-commit install
+```
+
+4. Create your `.secrets.yaml` file (see `.secrets.yaml.example`).
+
+### Development Workflow
+
+Use the Makefile for common development tasks:
+
+```bash
+# Format code
+make format
+
+# Run linting
+make lint
+
+# Scan for secrets
+make secrets-check
+
+# Run tests
+make test
+make unit-test
+make int-test
+```
+
+### Secret Protection
+
+This repository uses several layers of protection to prevent accidental leakage of secrets:
+
+1. **Pre-commit hooks**: Automatically detect secrets before they're committed
+2. **Makefile target**: Run `make secrets-check` to manually scan for secrets
+3. **CI/CD checks**: GitHub Actions automatically scans all PRs and pushes for secrets
 
 ## Environment Variables
 
@@ -161,22 +214,6 @@ export PAN_CLIENT_SECRET=your-client-secret
 export PAN_TSG_ID=your-tsg-id
 ```
 
-## Development
-
-### Code Style
-
-This project uses:
-- `ruff` for code quality checks and formatting
-- `flake8` for additional code quality checks (max line length: 128 characters)
-
-### Testing
-
-Run tests with pytest:
-
-```bash
-poetry run pytest
-```
-
 ## Contributing
 
 1. Fork the repository
@@ -188,4 +225,3 @@ poetry run pytest
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-# pan-scm-cicd

@@ -1,0 +1,13 @@
+default:
+  api_base_url: "https://api.strata.paloaltonetworks.com"
+  token_url: "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"
+  log_level: "INFO"
+
+development:
+  # These values will be moved to .secrets.yaml
+
+production:
+  # These values should be set via environment variables in GitHub Actions
+  client_id: "@format {env[PAN_CLIENT_ID]}"
+  client_secret: "@format {env[PAN_CLIENT_SECRET]}"
+  tsg_id: "@format {env[PAN_TSG_ID]}"
