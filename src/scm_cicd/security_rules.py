@@ -63,34 +63,41 @@ class SCMSecurityRuleManager:
             return
 
         try:
-            # Get credentials from settings module
-            client_id = settings.get("client_id", "")
-            client_secret = settings.get("client_secret", "")
-            tsg_id = settings.get("tsg_id", "")
+            # Get credentials from environment variables or settings
+            # Dynaconf will automatically look for SCM_CLIENT_ID, SCM_CLIENT_SECRET, etc.
+            client_id = settings.CLIENT_ID
+            client_secret = settings.CLIENT_SECRET
+            tsg_id = settings.TSG_ID
 
-            # Check if credentials are available
-            if not all([client_id, client_secret, tsg_id]):
-                logger.error("Missing required credentials. Please set them in .secrets.yaml or environment variables.")
-                if not self.testing:
-                    sys.exit(1)
-                else:
-                    # For testing, just return without initializing the client
-                    return
+            # These may not be set, so provide defaults
+            api_base_url = getattr(settings, "API_BASE_URL", "https://api.strata.paloaltonetworks.com")
+            token_url = getattr(settings, "TOKEN_URL", "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token")
+            log_level = getattr(settings, "LOG_LEVEL", "INFO")
 
-            # Initialize the SCM client
+            # Initialize the client with credentials
             self.client = Scm(
                 client_id=client_id,
                 client_secret=client_secret,
                 tsg_id=tsg_id,
-                api_base_url=settings.get("api_base_url", "https://api.strata.paloaltonetworks.com"),
-                token_url=settings.get("token_url", "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"),
-                log_level=settings.get("log_level", "INFO"),
+                api_base_url=api_base_url,
+                token_url=token_url,
+                log_level=log_level,
             )
             logger.info("SCM client initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize SCM client: {str(e)}")
+        except AttributeError as e:
+            logger.error(f"Missing required credentials: {e}")
+            logger.error("Please set SCM_CLIENT_ID, SCM_CLIENT_SECRET, and SCM_TSG_ID environment variables")
             if not self.testing:
                 sys.exit(1)
+            else:
+                # For testing, just return without initializing the client
+                return
+        except AuthenticationError as e:
+            logger.error(f"Authentication failed: {e}")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Failed to initialize SCM client: {e}")
+            sys.exit(1)
 
     def _get_rulebase_enum(self, rulebase: str) -> SecurityRuleRulebase:
         """Convert string rulebase to SecurityRuleRulebase enum.
