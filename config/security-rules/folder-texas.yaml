@@ -9,7 +9,7 @@
   to_: ["DIA"]
   source: ["internal_network4", "internal_network5"]
   destination: ["any"]
-  application: ["web-browsing", "ssl", "dns", "ssh"]
+  application: ["web-browsing", "ssl", "dns", "ssh", "ping"]
   service: ["application-default"]
   category: ["any"]
   source_user: ["any"]
