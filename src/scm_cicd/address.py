@@ -7,6 +7,7 @@ operations through a CICD pipeline with configuration stored in YAML files.
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -61,6 +62,12 @@ class SCMAddressManager:
 
     def _initialize_client(self):
         """Initialize the SCM client."""
+        # Check if we're in validation mode (for CI/CD)
+        if os.environ.get("SCM_VALIDATION_MODE", "").lower() == "true":
+            logger.info("Running in validation mode, skipping actual client initialization")
+            self.client = None
+            return
+
         try:
             # Initialize the client with credentials from settings
             self.client = Scm(
@@ -116,7 +123,7 @@ class SCMAddressManager:
         """Load address objects from a configuration file.
 
         Args:
-            file_path: Path to the address configuration file
+            file_path: Path to the configuration file
 
         Returns:
             List of validated AddressCreateModel objects
@@ -140,28 +147,32 @@ class SCMAddressManager:
                     logger.error(f"Unsupported file format: {file_path.suffix}")
                     return []
         except Exception as e:
-            logger.error(f"Error loading configuration file: {e}")
+            logger.error(f"Error loading file: {e}")
             return []
 
+        # Validate data
         if not data:
-            logger.error("Configuration file is empty or invalid")
+            logger.error("No data found in configuration file")
             return []
 
-        # Ensure data is a list
         if not isinstance(data, list):
-            data = [data]
+            logger.error("Configuration must be a list of address objects")
+            return []
 
-        # Validate addresses against the model
+        # Parse and validate addresses
         validated_addresses = []
-        for idx, item in enumerate(data):
+        for i, addr_data in enumerate(data):
             try:
-                address = AddressCreateModel(**item)
+                # Create a model to validate the structure
+                address = AddressCreateModel(**addr_data)
                 validated_addresses.append(address)
+                logger.debug(f"Validated address: {address.name}")
             except ValidationError as e:
-                logger.error(f"Validation error for address at position {idx}: {e}")
-            except Exception as e:
-                logger.error(f"Unexpected error validating address at position {idx}: {e}")
+                logger.error(f"Validation error in address at index {i}: {e}")
+                # Continue validation but return failure overall
+                sys.exit(1)
 
+        logger.info(f"Successfully loaded {len(validated_addresses)} address objects")
         return validated_addresses
 
     def create_address(self, address: AddressCreateModel) -> Optional[AddressResponseModel]:
@@ -341,43 +352,35 @@ class SCMAddressManager:
         This method handles the create or update decision based on whether the address exists.
 
         Args:
-            file_path: Path to the address configuration file
-            commit_changes: Whether to commit changes after applying addresses
+            file_path: Path to the configuration file
+            commit_changes: Whether to commit changes after applying the configuration
 
         Returns:
-            True if all addresses were applied successfully, False otherwise
+            True if all operations were successful, False otherwise
         """
         # Load and validate addresses
         addresses = self.load_addresses_from_file(file_path)
         if not addresses:
-            logger.error("No valid addresses found in configuration file")
             return False
 
-        if self.client is None:
-            logger.error("SCM client not initialized")
+        # In validation mode, we only need to validate the file format, which we've done already
+        if os.environ.get("SCM_VALIDATION_MODE", "").lower() == "true":
+            logger.info("Validation successful in validation mode")
+            return True
+
+        # Process addresses and get affected folders
+        success, affected_folders = self._process_addresses(addresses)
+        if not success:
             return False
 
-        # Apply the addresses
-        success, affected_folders = self._apply_addresses(addresses)
+        # Commit changes if requested
+        if commit_changes and affected_folders:
+            return self._commit_changes(affected_folders)
 
-        # Commit changes if requested and there are affected folders
-        if commit_changes and affected_folders and success:
-            # Check both the status and look for job_id to determine success
-            # The SDK sometimes returns None for status even when commit is successful
-            commit_result = self.commit(list(affected_folders))
-            status = commit_result.get("status")
-            job_id = commit_result.get("job_id")
+        return True
 
-            if job_id and (status == "SUCCESS" or status is None):
-                logger.info(f"Commit successful with job ID: {job_id}")
-            else:
-                logger.warning(f"Commit may have failed. Status: {status}")
-                success = False
-
-        return success
-
-    def _apply_addresses(self, addresses: List[AddressCreateModel]) -> tuple[bool, set[str]]:
-        """Apply a list of address objects.
+    def _process_addresses(self, addresses: List[AddressCreateModel]) -> tuple[bool, set[str]]:
+        """Process a list of addresses, creating or updating as needed.
 
         Args:
             addresses: List of address objects to apply
@@ -385,32 +388,31 @@ class SCMAddressManager:
         Returns:
             Tuple of (success, affected_folders)
         """
-        success = True
+        # Group addresses by container
+        container_addresses = {}
         affected_folders = set()
 
         # Group addresses by container to minimize API calls
-        container_addresses = {}
         for address in addresses:
             # Get container info
             container_info = self._get_container_info(address)
             if not container_info:
                 logger.error(f"No container specified for address: {address.name}")
-                success = False
-                continue
+                return False, set()
 
             container, container_type = container_info
 
-            # Track folder for commits
+            # Add to affected folders if this is a folder
             if container_type == "folder":
                 affected_folders.add(container)
 
-            # Group by container and type
-            key = (container, container_type)
-            if key not in container_addresses:
-                container_addresses[key] = []
-            container_addresses[key].append(address)
+            # Group by container for efficient processing
+            container_key = (container, container_type)
+            if container_key not in container_addresses:
+                container_addresses[container_key] = []
+            container_addresses[container_key].append(address)
 
-        # Process addresses by container
+        # Process each container's addresses
         for (container, container_type), container_address_list in container_addresses.items():
             # Get existing addresses in this container
             existing_addresses = self.list_addresses(container, container_type=container_type, exact_match=True)
@@ -422,9 +424,31 @@ class SCMAddressManager:
             for address in container_address_list:
                 result = self._apply_single_address_with_lookup(address, container, container_type, existing_address_map)
                 if not result:
-                    success = False
+                    return False, set()
 
-        return success, affected_folders
+        return True, affected_folders
+
+    def _commit_changes(self, folders: set[str]) -> bool:
+        """Commit changes to the specified folders.
+
+        Args:
+            folders: Set of folder names to commit
+
+        Returns:
+            True if commit was successful, False otherwise
+        """
+        # Check both the status and look for job_id to determine success
+        # The SDK sometimes returns None for status even when commit is successful
+        commit_result = self.commit(list(folders))
+        status = commit_result.get("status")
+        job_id = commit_result.get("job_id")
+
+        if job_id and (status == "SUCCESS" or status is None):
+            logger.info(f"Commit successful with job ID: {job_id}")
+            return True
+        else:
+            logger.warning(f"Commit may have failed. Status: {status}")
+            return False
 
     def _get_container_info(self, address: AddressCreateModel) -> Optional[tuple[str, str]]:
         """Extract container information from an address.

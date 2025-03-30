@@ -81,6 +81,21 @@ jobs:
         run: |
           checkov -d config/address-objects --framework yaml
 
+      - name: Setup mock credentials for validation
+        run: |
+          # Create .secrets.yaml with mock credentials for validation only
+          cat > .secrets.yaml << EOL
+          default:
+            client_id: "mock-client-id"
+            client_secret: "mock-client-secret"
+            tsg_id: "mock-tsg-id"
+            api_base_url: "https://api.strata.paloaltonetworks.com"
+            token_url: "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"
+            log_level: "INFO"
+          EOL
+          # Set environment variables to indicate validation mode
+          echo "SCM_VALIDATION_MODE=true" >> $GITHUB_ENV
+
       - name: Validate address object syntax
         run: |
           # Validate all address object files
@@ -88,6 +103,11 @@ jobs:
             echo "Validating $file"
             python -m scm_cicd.cli apply address "$file" --dry-run
           done
+        env:
+          SCM_VALIDATION_MODE: true
+          SCM_CLIENT_ID: "mock-client-id"
+          SCM_CLIENT_SECRET: "mock-client-secret"
+          SCM_TSG_ID: "mock-tsg-id"
 
   # Validate security rules configuration
   validate-security-rules:
@@ -117,6 +137,21 @@ jobs:
         run: |
           checkov -d config/security-rules --framework yaml
 
+      - name: Setup mock credentials for validation
+        run: |
+          # Create .secrets.yaml with mock credentials for validation only
+          cat > .secrets.yaml << EOL
+          default:
+            client_id: "mock-client-id"
+            client_secret: "mock-client-secret"
+            tsg_id: "mock-tsg-id"
+            api_base_url: "https://api.strata.paloaltonetworks.com"
+            token_url: "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"
+            log_level: "INFO"
+          EOL
+          # Set environment variables to indicate validation mode
+          echo "SCM_VALIDATION_MODE=true" >> $GITHUB_ENV
+
       - name: Validate rule syntax
         run: |
           # Validate all rule files in the config directory
@@ -124,6 +159,11 @@ jobs:
             echo "Validating $file"
             python -m scm_cicd.cli apply security-rule "$file" --dry-run
           done
+        env:
+          SCM_VALIDATION_MODE: true
+          SCM_CLIENT_ID: "mock-client-id"
+          SCM_CLIENT_SECRET: "mock-client-secret"
+          SCM_TSG_ID: "mock-tsg-id"
 
   # Deploy both address objects and security rules
   deploy:
@@ -177,6 +217,10 @@ jobs:
             echo "Applying address objects from $file"
             python -m scm_cicd.cli apply address "$file" --commit
           done
+        env:
+          SCM_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
+          SCM_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
+          SCM_TSG_ID: ${{ secrets.PAN_TSG_ID }}
 
       - name: Apply security rules
         run: |
@@ -185,3 +229,7 @@ jobs:
             echo "Applying security rules from $file"
             python -m scm_cicd.cli apply security-rule "$file" --commit
           done
+        env:
+          SCM_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
+          SCM_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
+          SCM_TSG_ID: ${{ secrets.PAN_TSG_ID }}
