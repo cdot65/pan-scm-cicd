@@ -1,0 +1,18 @@
+# SCM-compatible security rules that only use existing resources
+# This file contains both new rules and modifications to existing rules
+
+# This is an existing rule that should be updated (only using existing tags)
+- name: "allow-test"
+  folder: "Cypress"
+  description: "Just a simple test rule"
+  from_: ["DMZ"]
+  to_: ["DIA"]
+  source: ["any"]
+  destination: ["any"]
+  application: ["web-browsing", "ssl", "dns", "ssh", "ping"]
+  service: ["application-default"]
+  category: ["any"]
+  source_user: ["any"]
+  action: "allow"
+  log_end: true
+  tag: ["Automation", "CICD"]  # Only using existing tags
