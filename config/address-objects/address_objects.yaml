@@ -1,0 +1,37 @@
+# Example address objects for Palo Alto Networks Strata Cloud Manager
+# This file demonstrates the different types of address objects supported by the SCM API
+
+# An IPv4 network address
+- name: "internal-network"
+  folder: "Texas"
+  description: "Internal corporate network"
+  ip_netmask: "10.0.0.0/16"
+  tag: ["Network", "Internal"]
+
+# An IPv4 host address
+- name: "web-server"
+  folder: "Texas"
+  description: "Primary web server"
+  ip_netmask: "192.168.1.100/32"
+  tag: ["Server", "Web"]
+
+# An IPv4 range address
+- name: "dhcp-pool"
+  folder: "Texas"
+  description: "DHCP address range for guest network"
+  ip_range: "10.200.0.100-10.200.0.200"
+  tag: ["DHCP", "Guest"]
+
+# An IPv6 network address
+- name: "ipv6-network"
+  folder: "Texas"
+  description: "IPv6 network segment"
+  ip_netmask: "2001:db8:1234::/64"
+  tag: ["Network", "IPv6"]
+
+# A Fully Qualified Domain Name
+- name: "example-site"
+  folder: "Texas"
+  description: "Example website"
+  fqdn: "example.com"
+  tag: ["Web", "External"]

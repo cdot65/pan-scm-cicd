@@ -7,6 +7,7 @@ operations through a CICD pipeline with configuration stored in YAML files.
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -55,6 +56,12 @@ class SCMSecurityRuleManager:
 
     def _initialize_client(self) -> None:
         """Initialize the SCM client with proper authentication."""
+        # Check if we're in validation mode (for CI/CD)
+        if os.environ.get("SCM_VALIDATION_MODE", "").lower() == "true":
+            logger.info("Running in validation mode, skipping actual client initialization")
+            self.client = None
+            return
+
         try:
             # Get credentials from settings module
             client_id = settings.get("client_id", "")
@@ -389,6 +396,11 @@ class SCMSecurityRuleManager:
         if not rules:
             logger.error("No valid rules found in configuration file")
             return False
+
+        # In validation mode, we only need to validate the file format, which we've done already
+        if os.environ.get("SCM_VALIDATION_MODE", "").lower() == "true":
+            logger.info("Validation successful in validation mode")
+            return True
 
         if self.client is None:
             logger.error("SCM client not initialized")

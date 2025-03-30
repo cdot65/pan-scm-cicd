@@ -1,0 +1,235 @@
+name: SCM Configuration Management
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'config/security-rules/**'
+      - 'config/address-objects/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'config/security-rules/**'
+      - 'config/address-objects/**'
+  workflow_dispatch:
+    # Removed inputs to resolve CKV_GHA_7 finding
+    # Using environment configuration in the jobs instead
+
+# Set restricted permissions as a security best practice (addressing CKV2_GHA_1)
+permissions:
+  contents: read
+
+jobs:
+  security-scan:
+    name: Security and Secrets Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # Explicitly set job permissions
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Required for some security scanners that need git history
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry install
+
+      - name: Scan for secrets with Checkov
+        run: |
+          checkov --directory . --framework secrets
+
+      - name: Scan for secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Validate address objects configuration
+  validate-address-objects:
+    name: Validate Address Objects
+    runs-on: ubuntu-latest
+    needs: security-scan
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry install
+
+      - name: Run security checks with Checkov
+        run: |
+          checkov -d config/address-objects --framework yaml
+
+      - name: Setup mock credentials for validation
+        run: |
+          # Create .secrets.yaml with mock credentials for validation only
+          cat > .secrets.yaml << EOL
+          default:
+            client_id: "mock-client-id"
+            client_secret: "mock-client-secret"
+            tsg_id: "mock-tsg-id"
+            api_base_url: "https://api.strata.paloaltonetworks.com"
+            token_url: "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"
+            log_level: "INFO"
+          EOL
+          # Set environment variables to indicate validation mode
+          echo "SCM_VALIDATION_MODE=true" >> $GITHUB_ENV
+
+      - name: Validate address object syntax
+        run: |
+          # Validate all address object files
+          for file in config/address-objects/*.yaml; do
+            echo "Validating $file"
+            python -m scm_cicd.cli apply address "$file" --dry-run
+          done
+        env:
+          SCM_VALIDATION_MODE: true
+          SCM_CLIENT_ID: "mock-client-id"
+          SCM_CLIENT_SECRET: "mock-client-secret"
+          SCM_TSG_ID: "mock-tsg-id"
+
+  # Validate security rules configuration
+  validate-security-rules:
+    name: Validate Security Rules
+    runs-on: ubuntu-latest
+    needs: security-scan
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry install
+
+      - name: Run security checks with Checkov
+        run: |
+          checkov -d config/security-rules --framework yaml
+
+      - name: Setup mock credentials for validation
+        run: |
+          # Create .secrets.yaml with mock credentials for validation only
+          cat > .secrets.yaml << EOL
+          default:
+            client_id: "mock-client-id"
+            client_secret: "mock-client-secret"
+            tsg_id: "mock-tsg-id"
+            api_base_url: "https://api.strata.paloaltonetworks.com"
+            token_url: "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"
+            log_level: "INFO"
+          EOL
+          # Set environment variables to indicate validation mode
+          echo "SCM_VALIDATION_MODE=true" >> $GITHUB_ENV
+
+      - name: Validate rule syntax
+        run: |
+          # Validate all rule files in the config directory
+          for file in config/security-rules/*.yaml; do
+            echo "Validating $file"
+            python -m scm_cicd.cli apply security-rule "$file" --dry-run
+          done
+        env:
+          SCM_VALIDATION_MODE: true
+          SCM_CLIENT_ID: "mock-client-id"
+          SCM_CLIENT_SECRET: "mock-client-secret"
+          SCM_TSG_ID: "mock-tsg-id"
+
+  # Deploy both address objects and security rules
+  deploy:
+    name: Deploy SCM Configuration
+    needs: [validate-address-objects, validate-security-rules]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Using environment configuration instead of inputs
+    environment: production
+    permissions:
+      contents: read  # Only read permission needed for deployment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry install
+
+      - name: Setup SCM credentials
+        run: |
+          # Create .secrets.yaml from environment variables
+          cat > .secrets.yaml << EOL
+          default:
+            client_id: "${PAN_CLIENT_ID}"
+            client_secret: "${PAN_CLIENT_SECRET}"
+            tsg_id: "${PAN_TSG_ID}"
+            api_base_url: "https://api.strata.paloaltonetworks.com"
+            token_url: "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"
+            log_level: "INFO"
+          EOL
+        env:
+          PAN_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
+          PAN_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
+          PAN_TSG_ID: ${{ secrets.PAN_TSG_ID }}
+
+      - name: Apply address objects first
+        run: |
+          # Apply all address object files (Important: do this BEFORE security rules)
+          for file in config/address-objects/*.yaml; do
+            echo "Applying address objects from $file"
+            python -m scm_cicd.cli apply address "$file" --commit
+          done
+        env:
+          SCM_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
+          SCM_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
+          SCM_TSG_ID: ${{ secrets.PAN_TSG_ID }}
+
+      - name: Apply security rules
+        run: |
+          # Apply all security rule files after address objects are in place
+          for file in config/security-rules/*.yaml; do
+            echo "Applying security rules from $file"
+            python -m scm_cicd.cli apply security-rule "$file" --commit
+          done
+        env:
+          SCM_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
+          SCM_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
+          SCM_TSG_ID: ${{ secrets.PAN_TSG_ID }}
