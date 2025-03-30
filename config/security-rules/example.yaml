@@ -1,36 +1,34 @@
-# Example security rules for Palo Alto Networks SCM
-# This file can be applied with the CLI command:
-# poetry run python -m src.scm_cicd.cli apply config/security-rules/example.yaml
+# SCM-compatible security rules that only use existing resources
+# This file contains both new rules and modifications to existing rules
 
-# Allow internal to internet web traffic
+# This is an existing rule that should be updated (only using existing tags)
 - name: "allow-internal-web"
   folder: "Texas"
-  description: "Allow internal users to access web applications"
+  description: "Updated: Allow internal users to access web applications with additional protocols"
   from_: ["DMZ"]
   to_: ["DIA"]
   source: ["internal_network4", "internal_network5"]
   destination: ["any"]
-  application: ["web-browsing", "ssl", "dns"]
+  application: ["web-browsing", "ssl", "dns", "ssh"]
   service: ["application-default"]
   category: ["any"]
   source_user: ["any"]
   action: "allow"
   log_end: true
-  tag: ["Automation", "CICD"]
+  tag: ["Automation", "CICD"]  # Only using existing tags
 
-# Block known malicious sites
-- name: "block-malicious"
+# This is a new rule that should be created (only using existing tags)
+- name: "allow-monitoring-traffic"
   folder: "Texas"
-  description: "Block traffic to known malicious destinations"
+  description: "Allow monitoring systems to access all devices for telemetry"
   from_: ["DMZ"]
   to_: ["DIA"]
-  source: ["internal_network4", "internal_network5"]
-  destination: ["panw-highrisk-ip-list"]
-  application: ["any"]
-  service: ["any"]
+  source: ["internal_network4"]
+  destination: ["any"]
+  application: ["ping", "ssh", "snmp"]
+  service: ["application-default"]
   category: ["any"]
   source_user: ["any"]
-  action: "deny"
-  log_start: true
+  action: "allow"
   log_end: true
-  tag: ["Automation", "CICD"]
+  tag: ["Automation", "CICD"]  # Only using existing tags

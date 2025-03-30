@@ -418,23 +418,41 @@ class SCMSecurityRuleManager:
         success = True
         affected_folders = set()
 
+        # Group rules by container to minimize API calls
+        container_rules = {}
         for rule in rules:
-            # Get container information
+            # Get container info
             container_info = self._get_container_info(rule)
             if not container_info:
+                logger.error(f"No container specified for rule: {rule.name}")
                 success = False
                 continue
 
             container, container_type = container_info
 
-            # Apply the rule
-            result = self._apply_single_rule(rule, container, container_type, rulebase)
-            if not result:
-                success = False
+            # Track folder for commits
+            if container_type == "folder":
+                affected_folders.add(container)
 
-            # Track affected folders for commit
-            if rule.folder:
-                affected_folders.add(rule.folder)
+            # Group by container and type
+            key = (container, container_type)
+            if key not in container_rules:
+                container_rules[key] = []
+            container_rules[key].append(rule)
+
+        # Process rules by container
+        for (container, container_type), container_rule_list in container_rules.items():
+            # Get existing rules in this container
+            existing_rules = self.list_rules(container, container_type=container_type, rulebase=rulebase, exact_match=True)
+
+            # Create a lookup map for faster access
+            existing_rule_map = {rule.name: rule for rule in existing_rules}
+
+            # Apply each rule
+            for rule in container_rule_list:
+                result = self._apply_single_rule_with_lookup(rule, container, container_type, rulebase, existing_rule_map)
+                if not result:
+                    success = False
 
         return success, affected_folders
 
@@ -465,30 +483,66 @@ class SCMSecurityRuleManager:
 
         return container, container_type
 
-    def _apply_single_rule(self, rule: SecurityRuleCreateModel, container: str, container_type: str, rulebase: str) -> bool:
-        """Apply a single security rule.
+    def _apply_single_rule_with_lookup(
+        self, rule: SecurityRuleCreateModel, container: str, container_type: str, rulebase: str, existing_rule_map: dict
+    ) -> bool:
+        """Apply a single security rule using a lookup of existing rules.
 
         Args:
             rule: Security rule to apply
             container: Container name
             container_type: Container type (folder, snippet, or device)
             rulebase: Rulebase to apply the rule to
+            existing_rule_map: Dictionary mapping rule names to existing rule objects
 
         Returns:
             True if the rule was applied successfully, False otherwise
         """
         try:
-            # Check if the rule exists
-            existing = self.get_rule_by_name(rule.name, container, container_type, rulebase)
+            # Check if the rule exists in our lookup map
+            if rule.name in existing_rule_map:
+                # Get the existing rule with its ID
+                existing_rule = existing_rule_map[rule.name]
 
-            if existing:
-                # Update existing rule
-                result = self.update_rule(rule, rulebase)
+                # For updating, we need to create a separate update model with the ID
+                update_data = rule.model_dump(exclude_none=True)
+
+                # Make sure to set the ID field for the update
+                update_data["id"] = existing_rule.id
+
+                # Update the rule using the SDK's update method
+                logger.info(f"Updating existing rule: {rule.name}")
+                result = self.update_rule_by_id(update_data, rulebase)
             else:
-                # Create new rule
+                # Create a new rule
+                logger.info(f"Creating new rule: {rule.name}")
                 result = self.create_rule(rule, rulebase)
 
             return result is not None
         except Exception as e:
             logger.error(f"Error applying rule {rule.name}: {str(e)}")
             return False
+
+    def update_rule_by_id(self, rule_data: dict, rulebase: str):
+        """Update a security rule by its ID.
+
+        Args:
+            rule_data: Dictionary containing rule data including the ID
+            rulebase: The rulebase to update (pre or post)
+
+        Returns:
+            Updated rule data or None if there was an error
+        """
+        try:
+            # Create an update model with the data including ID
+            update_model = SecurityRuleUpdateModel(**rule_data)
+
+            # Update the rule
+            result = self.client.security_rule.update(update_model, rulebase=self._get_rulebase_enum(rulebase))
+            return result
+        except ValidationError as e:
+            logger.error(f"Error validating update data: {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"Error updating rule: {str(e)}")
+            return None
