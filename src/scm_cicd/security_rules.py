@@ -400,7 +400,15 @@ class SCMSecurityRuleManager:
         # Commit changes if requested and there are affected folders
         if commit_changes and affected_folders and success:
             commit_result = self.commit(list(affected_folders))
-            if commit_result.get("status") != "SUCCESS":
+            # Check both the status and look for job_id to determine success
+            # The SDK sometimes returns None for status even when commit is successful
+            status = commit_result.get("status")
+            job_id = commit_result.get("job_id")
+
+            if job_id and (status == "SUCCESS" or status is None):
+                logger.info(f"Commit successful with job ID: {job_id}")
+            else:
+                logger.warning(f"Commit may have failed. Status: {status}")
                 success = False
 
         return success
