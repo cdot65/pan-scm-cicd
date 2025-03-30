@@ -69,12 +69,24 @@ class SCMAddressManager:
             return
 
         try:
+            # Get credentials from settings module
+            client_id = settings.get("client_id", "")
+            client_secret = settings.get("client_secret", "")
+            tsg_id = settings.get("tsg_id", "")
+
+            # Check if credentials are available
+            if not all([client_id, client_secret, tsg_id]):
+                logger.error("Missing required credentials. Please set them in .secrets.yaml or environment variables.")
+                sys.exit(1)
+
             # Initialize the client with credentials from settings
             self.client = Scm(
-                client_id=settings.client_id,
-                client_secret=settings.client_secret,
-                tsg_id=settings.tsg_id,
-                log_level=settings.log_level,
+                client_id=client_id,
+                client_secret=client_secret,
+                tsg_id=tsg_id,
+                api_base_url=settings.get("api_base_url", "https://api.strata.paloaltonetworks.com"),
+                token_url=settings.get("token_url", "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"),
+                log_level=settings.get("log_level", "INFO"),
             )
             logger.info("SCM client initialized successfully")
         except AuthenticationError as e:
