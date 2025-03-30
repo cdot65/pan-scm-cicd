@@ -1,246 +1,308 @@
 """
-Command-line interface for SCM CICD Security Rules Manager.
-
-This module provides a CLI interface for managing security rules in Palo Alto Networks
-Strata Cloud Manager through a CICD pipeline.
+Command Line Interface for managing Palo Alto Networks Strata Cloud Manager through a CICD pipeline.
 """
 
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from scm_cicd.address import SCMAddressManager
 from scm_cicd.security_rules import SCMSecurityRuleManager
 
 console = Console()
-app = typer.Typer(help="SCM CICD Security Rules Manager")
+app = typer.Typer(help="SCM CICD Manager for Palo Alto Networks Strata Cloud Manager")
+
+# Create subcommands for different operations
+apply_app = typer.Typer(help="Apply configuration to SCM")
+list_app = typer.Typer(help="List objects from SCM")
+delete_app = typer.Typer(help="Delete objects from SCM")
+
+# Register the subcommand apps
+app.add_typer(apply_app, name="apply")
+app.add_typer(list_app, name="list")
+app.add_typer(delete_app, name="delete")
 
 # Define common arguments as module level variables
-CONFIG_FILE_ARG = typer.Argument(..., help="Path to the security rule configuration file (JSON or YAML)", exists=True)
+CONFIG_FILE_ARG = typer.Argument(..., help="Path to the configuration file (JSON or YAML)", exists=True)
 CONTAINER_ARG = typer.Argument(..., help="Container name (folder, snippet, or device)")
-CONTAINER_TYPE_ARG = typer.Option("folder", "--type", "-t", help="Container type (folder, snippet, or device)")
-RULEBASE_ARG = typer.Option("pre", "--rulebase", "-r", help="Rulebase to apply rules to (pre or post)")
-COMMIT_ARG = typer.Option(False, "--commit", "-c", help="Commit changes after applying rules")
-DRY_RUN_ARG = typer.Option(False, "--dry-run", "-d", help="Validate the rule configuration without applying changes")
-NAME_ARG = typer.Argument(..., help="Rule name")
-DESCRIPTION_ARG = typer.Option("CICD automated commit", "--message", "-m", help="Commit description")
-FOLDERS_ARG = typer.Argument(..., help="Folders to commit")
+CONTAINER_TYPE_OPT = typer.Option("folder", "--type", "-t", help="Container type: folder, snippet, or device")
+RULEBASE_OPT = typer.Option("pre", "--rulebase", "-r", help="Rulebase to use: pre or post")
+COMMIT_OPT = typer.Option(False, "--commit", "-c", help="Commit changes after operation")
+DRY_RUN_OPT = typer.Option(False, "--dry-run", "-d", help="Validate but don't apply changes")
+
+#
+# Security Rules Implementation
+#
 
 
-@app.command()
-def apply(
-    config_file: Optional[Path] = CONFIG_FILE_ARG,
-    rulebase: str = RULEBASE_ARG,
-    commit: bool = COMMIT_ARG,
-    dry_run: bool = DRY_RUN_ARG,
+@apply_app.command("security-rule")
+def apply_security_rule(
+    file_path: Path = CONFIG_FILE_ARG,
+    rulebase: str = RULEBASE_OPT,
+    commit: bool = COMMIT_OPT,
+    dry_run: bool = DRY_RUN_OPT,
 ):
     """Apply security rules from a configuration file."""
-    manager = SCMSecurityRuleManager(testing=True)
-
-    console.print(f"[bold green]Applying rules from[/bold green] [cyan]{config_file}[/cyan]")
+    manager = SCMSecurityRuleManager()
+    console.print(f"Applying rules from {file_path}")
 
     if dry_run:
-        # Just load and validate the rules without applying
-        rules = manager.load_rules_from_file(config_file)
-        if rules:
-            console.print(f"[bold green]Configuration valid - found {len(rules)} rules[/bold green]")
-            for rule in rules:
-                container_type = "unknown"
-                container_value = None
-                if rule.folder:
-                    container_type = "folder"
-                    container_value = rule.folder
-                elif rule.snippet:
-                    container_type = "snippet"
-                    container_value = rule.snippet
-                elif rule.device:
-                    container_type = "device"
-                    container_value = rule.device
-
-                console.print(f"  - [cyan]{rule.name}[/cyan] in [yellow]{container_type}:{container_value}[/yellow]")
-            return
-        else:
-            console.print("[bold red]Invalid configuration[/bold red]")
-            raise typer.Exit(code=1)
-
-    success = manager.apply_rules_from_file(config_file, rulebase=rulebase, commit_changes=commit)
-
-    if success:
-        console.print("[bold green]Successfully applied all rules[/bold green]")
-    else:
-        console.print("[bold red]Failed to apply some or all rules[/bold red]")
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def list(
-    container: Optional[str] = CONTAINER_ARG,
-    container_type: str = CONTAINER_TYPE_ARG,
-    rulebase: str = RULEBASE_ARG,
-):
-    """List security rules in a container."""
-    manager = SCMSecurityRuleManager(testing=True)
-
-    console.print(f"[bold green]Listing rules in[/bold green] [cyan]{container_type}:{container}[/cyan]")
-    rules = manager.list_rules(container, container_type=container_type, rulebase=rulebase)
-
-    if not rules:
-        console.print(f"[yellow]No rules found in {container_type}:{container}[/yellow]")
+        # Only validate the configuration
+        rules = manager.load_rules_from_file(file_path)
+        if not rules:
+            console.print("Failed to load rules", style="bold red")
+            sys.exit(1)
+        console.print("Configuration validated successfully", style="bold green")
         return
 
-    # Create a table
-    table = Table(title=f"Security Rules in {container_type}:{container}")
-    table.add_column("Name", style="cyan")
-    table.add_column("Source", style="green")
-    table.add_column("Destination", style="green")
-    table.add_column("Application", style="yellow")
-    table.add_column("Service", style="yellow")
-    table.add_column("Action", style="red")
-
-    for rule in rules:
-
-        def format_list(items, max_items=3):
-            if not items:
-                return "any"
-            items_to_show = items[:max_items]
-            ellipsis = "..." if len(items) > max_items else ""
-            return ", ".join(items_to_show) + ellipsis
-
-        name = rule.name
-        source = format_list(rule.source if hasattr(rule, "source") and rule.source else ["any"])
-        destination = format_list(rule.destination if hasattr(rule, "destination") and rule.destination else ["any"])
-        application = format_list(rule.application if hasattr(rule, "application") and rule.application else ["any"])
-        service = format_list(rule.service if hasattr(rule, "service") and rule.service else ["any"])
-        action = rule.action if hasattr(rule, "action") and rule.action else "allow"
-
-        table.add_row(name, source, destination, application, service, action)
-
-    console.print(table)
-
-
-@app.command()
-def list_exact(
-    container: Optional[str] = CONTAINER_ARG,
-    container_type: str = CONTAINER_TYPE_ARG,
-    rulebase: str = RULEBASE_ARG,
-):
-    """List only security rules defined directly in a container (excludes inherited rules)."""
-    manager = SCMSecurityRuleManager(testing=True)
-
-    console.print(f"[bold green]Listing directly defined rules in[/bold green] [cyan]{container_type}:{container}[/cyan]")
-    rules = manager.list_rules(container, container_type=container_type, rulebase=rulebase, exact_match=True)
-
-    if not rules:
-        console.print(f"[yellow]No directly defined rules found in {container_type}:{container}[/yellow]")
-        return
-
-    # Create a table
-    table = Table(title=f"Security Rules Defined Directly in {container_type}:{container}")
-    table.add_column("Name", style="cyan")
-    table.add_column("Container", style="magenta")
-    table.add_column("Source", style="green")
-    table.add_column("Destination", style="green")
-    table.add_column("Application", style="yellow")
-    table.add_column("Service", style="yellow")
-    table.add_column("Action", style="red")
-
-    for rule in rules:
-
-        def format_list(items, max_items=3):
-            if not items:
-                return "any"
-            items_to_show = items[:max_items]
-            ellipsis = "..." if len(items) > max_items else ""
-            return ", ".join(items_to_show) + ellipsis
-
-        # Get the container value based on what's present
-        container_value = "Unknown"
-        if rule.folder:
-            container_value = f"folder:{rule.folder}"
-        elif rule.snippet:
-            container_value = f"snippet:{rule.snippet}"
-        elif rule.device:
-            container_value = f"device:{rule.device}"
-
-        name = rule.name
-        source = format_list(rule.source if hasattr(rule, "source") and rule.source else ["any"])
-        destination = format_list(rule.destination if hasattr(rule, "destination") and rule.destination else ["any"])
-        application = format_list(rule.application if hasattr(rule, "application") and rule.application else ["any"])
-        service = format_list(rule.service if hasattr(rule, "service") and rule.service else ["any"])
-        action = rule.action if hasattr(rule, "action") and rule.action else "allow"
-
-        table.add_row(name, container_value, source, destination, application, service, action)
-
-    console.print(table)
-
-
-@app.command()
-def delete(
-    name: str = NAME_ARG,
-    container: str = CONTAINER_ARG,
-    container_type: str = CONTAINER_TYPE_ARG,
-    rulebase: str = RULEBASE_ARG,
-    commit: bool = COMMIT_ARG,
-):
-    """Delete a security rule."""
-    manager = SCMSecurityRuleManager(testing=True)
-
-    console.print(
-        f"[bold yellow]Deleting rule[/bold yellow] [cyan]{name}[/cyan] from [cyan]{container_type}:{container}[/cyan]"
-    )
-    success = manager.delete_rule(name, container, container_type=container_type, rulebase=rulebase)
-
-    if success and commit and container_type == "folder":
-        console.print("Committing changes...")
-        commit_result = manager.commit([container], description=f"Delete rule {name} via CICD")
-        if not commit_result.get("status") == "SUCCESS":
-            console.print(f"[bold red]Commit failed: {commit_result.get('error', 'Unknown error')}[/bold red]")
-            raise typer.Exit(code=1)
-    elif success and commit and container_type != "folder":
-        console.print("[bold yellow]Note:[/bold yellow] Commit is only supported for folder containers. Skipping commit.")
-
+    success = manager.apply_rules_from_file(file_path, rulebase, commit)
     if success:
-        console.print(f"[bold green]Successfully deleted rule {name}[/bold green]")
+        console.print("Successfully applied all rules", style="bold green")
     else:
-        console.print(f"[bold red]Failed to delete rule {name}[/bold red]")
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def commit(
-    folders: List[str] = FOLDERS_ARG,
-    description: str = DESCRIPTION_ARG,
-):
-    """Commit changes to SCM."""
-    manager = SCMSecurityRuleManager(testing=True)
-
-    console.print("[bold green]Committing changes to folders:[/bold green]")
-    for folder in folders:
-        console.print(f"  - [cyan]{folder}[/cyan]")
-
-    result = manager.commit(folders, description=description)
-    status = result.get("status", "UNKNOWN")
-    job_id = result.get("job_id", "N/A")
-
-    if status == "SUCCESS":
-        console.print(f"[bold green]Commit successful. Job ID: {job_id}[/bold green]")
-    else:
-        console.print(f"[bold red]Commit failed: {result.get('error', 'Unknown error')}[/bold red]")
-        console.print(f"Status: {status}")
-        raise typer.Exit(code=1)
-
-
-def main():
-    """Main entry point for the CLI."""
-    try:
-        app()
-    except Exception as e:
-        console.print(f"[bold red]Error: {str(e)}[/bold red]")
+        console.print("Failed to apply some or all rules", style="bold red")
         sys.exit(1)
 
 
+@list_app.command("security-rule")
+def list_security_rules(
+    container: str = CONTAINER_ARG,
+    container_type: str = CONTAINER_TYPE_OPT,
+    rulebase: str = RULEBASE_OPT,
+):
+    """List security rules from a container."""
+    manager = SCMSecurityRuleManager()
+    rules = manager.list_rules(container, container_type, rulebase)
+
+    if not rules:
+        console.print(f"No rules found in {container_type} '{container}'", style="yellow")
+        return
+
+    # Create a table for displaying rules
+    table = Table(title=f"Security Rules in {container_type.capitalize()} '{container}'")
+    table.add_column("Name", style="cyan")
+    table.add_column("Description")
+    table.add_column("Source")
+    table.add_column("Destination")
+    table.add_column("Action", style="green" if rulebase == "pre" else "red")
+
+    for rule in rules:
+        table.add_row(
+            rule.name,
+            rule.description or "",
+            ", ".join(rule.source) if hasattr(rule, "source") else "",
+            ", ".join(rule.destination) if hasattr(rule, "destination") else "",
+            rule.action if hasattr(rule, "action") else "",
+        )
+
+    console.print(table)
+
+
+@delete_app.command("security-rule")
+def delete_security_rule(
+    rule_name: str = typer.Argument(..., help="Name of the rule to delete"),
+    container: str = CONTAINER_ARG,
+    container_type: str = CONTAINER_TYPE_OPT,
+    rulebase: str = RULEBASE_OPT,
+    commit: bool = COMMIT_OPT,
+):
+    """Delete a security rule from a container."""
+    manager = SCMSecurityRuleManager()
+    success = manager.delete_rule(rule_name, container, container_type, rulebase)
+
+    if success:
+        console.print(f"Successfully deleted rule '{rule_name}'", style="bold green")
+
+        if commit:
+            result = manager.commit([container])
+            if result.get("status") == "SUCCESS" or result.get("job_id"):
+                console.print("Changes committed successfully", style="bold green")
+            else:
+                console.print("Failed to commit changes", style="bold red")
+                sys.exit(1)
+    else:
+        console.print(f"Failed to delete rule '{rule_name}'", style="bold red")
+        sys.exit(1)
+
+
+#
+# Address Objects Implementation
+#
+
+
+@apply_app.command("address")
+def apply_address(
+    file_path: Path = CONFIG_FILE_ARG,
+    commit: bool = COMMIT_OPT,
+    dry_run: bool = DRY_RUN_OPT,
+):
+    """Apply address objects from a configuration file."""
+    manager = SCMAddressManager()
+    console.print(f"Applying address objects from {file_path}")
+
+    if dry_run:
+        # Only validate the configuration
+        addresses = manager.load_addresses_from_file(file_path)
+        if not addresses:
+            console.print("Failed to load address objects", style="bold red")
+            sys.exit(1)
+        console.print("Configuration validated successfully", style="bold green")
+        console.print(f"Found {len(addresses)} valid address objects:")
+        for addr in addresses:
+            container_type = "unknown"
+            container_name = "unknown"
+            if addr.folder:
+                container_type = "folder"
+                container_name = addr.folder
+            elif addr.snippet:
+                container_type = "snippet"
+                container_name = addr.snippet
+            elif addr.device:
+                container_type = "device"
+                container_name = addr.device
+
+            console.print(f"  - {addr.name} in {container_type}:{container_name}")
+        return
+
+    success = manager.apply_addresses_from_file(file_path, commit)
+    if success:
+        console.print("Successfully applied all address objects", style="bold green")
+    else:
+        console.print("Failed to apply some or all address objects", style="bold red")
+        sys.exit(1)
+
+
+@list_app.command("address")
+def list_addresses(
+    container: str = CONTAINER_ARG,
+    container_type: str = CONTAINER_TYPE_OPT,
+    exact_match: bool = typer.Option(False, "--exact", help="Only show objects defined directly in this container"),
+):
+    """List address objects from a container."""
+    manager = SCMAddressManager()
+    addresses = manager.list_addresses(container, container_type, exact_match)
+
+    if not addresses:
+        console.print(f"No address objects found in {container_type} '{container}'", style="yellow")
+        return
+
+    # Create a table for displaying addresses
+    table = Table(title=f"Address Objects in {container_type.capitalize()} '{container}'")
+    table.add_column("Name", style="cyan")
+    table.add_column("Type", style="magenta")
+    table.add_column("Value", style="green")
+    table.add_column("Description")
+    table.add_column("Tags")
+
+    for addr in addresses:
+        # Determine address type and value
+        addr_type = "Unknown"
+        addr_value = ""
+
+        if addr.ip_netmask:
+            addr_type = "IP/Netmask"
+            addr_value = addr.ip_netmask
+        elif addr.ip_range:
+            addr_type = "IP Range"
+            addr_value = addr.ip_range
+        elif addr.ip_wildcard:
+            addr_type = "IP Wildcard"
+            addr_value = addr.ip_wildcard
+        elif addr.fqdn:
+            addr_type = "FQDN"
+            addr_value = addr.fqdn
+
+        table.add_row(addr.name, addr_type, addr_value, addr.description or "", ", ".join(addr.tag) if addr.tag else "")
+
+    console.print(table)
+
+
+@delete_app.command("address")
+def delete_address(
+    address_name: str = typer.Argument(..., help="Name of the address object to delete"),
+    container: str = CONTAINER_ARG,
+    container_type: str = CONTAINER_TYPE_OPT,
+    commit: bool = COMMIT_OPT,
+):
+    """Delete an address object from a container."""
+    manager = SCMAddressManager()
+    success = manager.delete_address(address_name, container, container_type)
+
+    if success:
+        console.print(f"Successfully deleted address object '{address_name}'", style="bold green")
+
+        if commit and container_type == "folder":
+            result = manager.commit([container])
+            if result.get("status") == "SUCCESS" or result.get("job_id"):
+                console.print("Changes committed successfully", style="bold green")
+            else:
+                console.print("Failed to commit changes", style="bold red")
+                sys.exit(1)
+        elif commit and container_type != "folder":
+            console.print("Commit is only supported for folder containers", style="yellow")
+    else:
+        console.print(f"Failed to delete address object '{address_name}'", style="bold red")
+        sys.exit(1)
+
+
+#
+# Backward compatibility commands
+#
+
+
+@app.command("apply")
+def apply_legacy(
+    file_path: Path = CONFIG_FILE_ARG,
+    rulebase: str = RULEBASE_OPT,
+    commit: bool = COMMIT_OPT,
+    dry_run: bool = DRY_RUN_OPT,
+):
+    """
+    [Deprecated] Apply configuration from a file.
+
+    Use 'scm-cicd apply security-rule' instead.
+    """
+    console.print("[yellow]Warning: This command is deprecated. Use 'scm-cicd apply security-rule' instead.[/yellow]")
+    apply_security_rule(file_path, rulebase, commit, dry_run)
+
+
+@app.command("list")
+def list_legacy(
+    container: str = CONTAINER_ARG,
+    container_type: str = CONTAINER_TYPE_OPT,
+    rulebase: str = RULEBASE_OPT,
+):
+    """
+    [Deprecated] List rules from a container.
+
+    Use 'scm-cicd list security-rule' instead.
+    """
+    console.print("[yellow]Warning: This command is deprecated. Use 'scm-cicd list security-rule' instead.[/yellow]")
+    list_security_rules(container, container_type, rulebase)
+
+
+@app.command("delete")
+def delete_legacy(
+    rule_name: str = typer.Argument(..., help="Name of the rule to delete"),
+    container: str = CONTAINER_ARG,
+    container_type: str = CONTAINER_TYPE_OPT,
+    rulebase: str = RULEBASE_OPT,
+    commit: bool = COMMIT_OPT,
+):
+    """
+    [Deprecated] Delete a rule from a container.
+
+    Use 'scm-cicd delete security-rule' instead.
+    """
+    console.print("[yellow]Warning: This command is deprecated. Use 'scm-cicd delete security-rule' instead.[/yellow]")
+    delete_security_rule(rule_name, container, container_type, rulebase, commit)
+
+
+#
+# Main CLI entry point
+#
+
 if __name__ == "__main__":
-    main()
+    app()
