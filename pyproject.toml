@@ -26,7 +26,7 @@ pre-commit = "^3.5.0"
 checkov = "^3.1.10"
 
 [tool.poetry.scripts]
-scm-cli = "scm_cicd.cli:main"
+scm-cicd = "scm_cicd.cli:main"
 
 [build-system]
 requires = ["poetry-core"]
