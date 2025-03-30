@@ -198,17 +198,17 @@ jobs:
           # Create .secrets.yaml from environment variables
           cat > .secrets.yaml << EOL
           default:
-            client_id: "${PAN_CLIENT_ID}"
-            client_secret: "${PAN_CLIENT_SECRET}"
-            tsg_id: "${PAN_TSG_ID}"
+            client_id: "${SCM_CLIENT_ID}"
+            client_secret: "${SCM_CLIENT_SECRET}"
+            tsg_id: "${SCM_TSG_ID}"
             api_base_url: "https://api.strata.paloaltonetworks.com"
             token_url: "https://auth.apps.paloaltonetworks.com/am/oauth2/access_token"
             log_level: "INFO"
           EOL
         env:
-          PAN_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
-          PAN_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
-          PAN_TSG_ID: ${{ secrets.PAN_TSG_ID }}
+          SCM_CLIENT_ID: ${{ secrets.SCM_CLIENT_ID }}
+          SCM_CLIENT_SECRET: ${{ secrets.SCM_CLIENT_SECRET }}
+          SCM_TSG_ID: ${{ secrets.SCM_TSG_ID }}
 
       - name: Apply address objects first
         run: |
@@ -218,9 +218,9 @@ jobs:
             python -m scm_cicd.cli apply address "$file" --commit
           done
         env:
-          SCM_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
-          SCM_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
-          SCM_TSG_ID: ${{ secrets.PAN_TSG_ID }}
+          SCM_CLIENT_ID: ${{ secrets.SCM_CLIENT_ID }}
+          SCM_CLIENT_SECRET: ${{ secrets.SCM_CLIENT_SECRET }}
+          SCM_TSG_ID: ${{ secrets.SCM_TSG_ID }}
 
       - name: Apply security rules
         run: |
@@ -230,6 +230,6 @@ jobs:
             python -m scm_cicd.cli apply security-rule "$file" --commit
           done
         env:
-          SCM_CLIENT_ID: ${{ secrets.PAN_CLIENT_ID }}
-          SCM_CLIENT_SECRET: ${{ secrets.PAN_CLIENT_SECRET }}
-          SCM_TSG_ID: ${{ secrets.PAN_TSG_ID }}
+          SCM_CLIENT_ID: ${{ secrets.SCM_CLIENT_ID }}
+          SCM_CLIENT_SECRET: ${{ secrets.SCM_CLIENT_SECRET }}
+          SCM_TSG_ID: ${{ secrets.SCM_TSG_ID }}
